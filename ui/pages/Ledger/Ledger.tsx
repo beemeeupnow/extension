@@ -11,7 +11,7 @@ import LedgerPrepare from "./LedgerPrepare"
 
 export default function Ledger(): ReactElement {
   const [phase, setPhase] = useState<
-    "0-prepare" | "1-request" | "2-connect" | "3-done"
+    "0-prepare" | "1-request" | "2-connect" | "3-done" | "4-error"
   >("0-prepare")
   const deviceID = useBackgroundSelector(
     (state) => state.ledger.currentDeviceID
@@ -23,10 +23,13 @@ export default function Ledger(): ReactElement {
 
   const dispatch = useBackgroundDispatch()
 
+  let rejected = false
+
   return (
     <BrowserTabContainer>
-      {phase === "0-prepare" && (
+      {(phase === "0-prepare" || phase === "4-error") && (
         <LedgerPrepare
+          showWarning={phase === "4-error"}
           onContinue={async () => {
             setPhase("1-request")
             try {
@@ -42,15 +45,20 @@ export default function Ledger(): ReactElement {
               // before firing clicks outside the popup.
               await new Promise((resolve) => setTimeout(resolve, 100))
 
-              // Advance anyway for testing. (TODO: do not.)
+              rejected = true
             }
-            setPhase("2-connect")
 
-            setConnecting(true)
-            try {
-              await dispatch(connectLedger())
-            } finally {
-              setConnecting(false)
+            if (rejected) {
+              setPhase("4-error")
+            } else {
+              setPhase("2-connect")
+
+              setConnecting(true)
+              try {
+                await dispatch(connectLedger())
+              } finally {
+                setConnecting(false)
+              }
             }
           }}
         />
@@ -60,13 +68,6 @@ export default function Ledger(): ReactElement {
         <LedgerPanelContainer
           indicatorImageSrc="/images/connect_ledger_indicator_disconnected.svg"
           heading="Connecting..."
-        />
-      )}
-      {phase === "2-connect" && !device && !connecting && (
-        /* FIXME: no UI spec for this */
-        <LedgerPanelContainer
-          indicatorImageSrc="/images/connect_ledger_indicator_disconnected.svg"
-          heading="Error during connection, reload the page"
         />
       )}
       {phase === "2-connect" && device && (
@@ -80,7 +81,7 @@ export default function Ledger(): ReactElement {
       {phase === "3-done" && (
         <LedgerImportDone
           onClose={() => {
-            setPhase("0-prepare")
+            window.close()
           }}
         />
       )}
